@@ -145,6 +145,17 @@ Após recarregar o `.bashrc`, os comandos abaixo estão disponíveis:
 - `dsh-disable-autostart`
 - `dsh-help`
 
+## Endpoints
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/` | Página inicial amigável com links para documentação |
+| `GET` | `/docs` | Swagger UI interativo (testar endpoints no navegador) |
+| `GET` | `/redoc` | Documentação alternativa em ReDoc |
+| `GET` | `/health` | Healthcheck do serviço |
+| `GET` | `/v1/models` | Lista os modelos expostos pelo proxy |
+| `POST` | `/v1/chat/completions` | Chat completion com roteamento TypeSafe Jev |
+
 ## Como usar
 
 ### Iniciar manualmente
