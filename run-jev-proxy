@@ -12,6 +12,11 @@ fi
 
 ENV_FILE="${PROJECT_DIR}/.env"
 
+# Garante que o Nix esteja no PATH (tanto em shells interativos quanto systemd)
+if [ -d "/nix/var/nix/profiles/default/bin" ]; then
+  export PATH="/nix/var/nix/profiles/default/bin${PATH:+:$PATH}"
+fi
+
 # Se a chave não estiver exportada no shell atual, tenta carregar do .env seguro.
 if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
   if [[ -f "${ENV_FILE}" ]]; then
