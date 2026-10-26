@@ -29,7 +29,7 @@ A classificação primeiro tenta consultar o motor **TypeSafe Jev** (`https://ap
 - [Uvicorn](https://www.uvicorn.org/)
 - [httpx](https://www.python-httpx.org/)
 - [python-dotenv](https://github.com/theskumar/python-dotenv)
-- [Nix Flakes](https://nixos.wiki/wiki/Flakes) (ambiente de desenvolvimento isolado)
+- [Nix Flakes](https://nixos.wiki/wiki/Flakes) (ambiente opcional; o padrão agora é venv local)
 - [Podman](https://podman.io/) (para Open WebUI, opcional)
 - [systemd](https://systemd.io/) (user services para autostart)
 
@@ -37,9 +37,10 @@ A classificação primeiro tenta consultar o motor **TypeSafe Jev** (`https://ap
 
 ```
 ~/.local/share/jev-proxy/
-├── flake.nix             # devShell Nix com Python 3.12 + dependências
+├── flake.nix             # devShell Nix opcional
+├── requirements.txt      # Dependências Python para venv local
 ├── server.py             # Servidor FastAPI / proxy / roteador
-├── run-jev-proxy         # Launcher que entra no nix develop
+├── run-jev-proxy         # Launcher (usa venv local ou Python do sistema)
 ├── .env                  # CHAVES REAIS (não versionado)
 ├── .env.example          # Template de variáveis
 ├── .gitignore            # Garante que .env nunca suba para o repo
@@ -74,6 +75,16 @@ mkdir -p ~/.local/bin
 cp run-jev-proxy ~/.local/bin/run-jev-proxy
 chmod +x ~/.local/bin/run-jev-proxy
 ```
+
+4. Crie o ambiente virtual local e instale as dependências (modo 100% local, sem Nix):
+
+```bash
+cd ~/.local/share/jev-proxy
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+```
+
+> O `run-jev-proxy` detecta automaticamente a pasta `venv` e a usa. Se quiser continuar usando Nix, basta não criar o `venv`.
 
 ## Configuração (.env)
 

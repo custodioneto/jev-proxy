@@ -11,11 +11,7 @@ else
 fi
 
 ENV_FILE="${PROJECT_DIR}/.env"
-
-# Garante que o Nix esteja no PATH (tanto em shells interativos quanto systemd)
-if [ -d "/nix/var/nix/profiles/default/bin" ]; then
-  export PATH="/nix/var/nix/profiles/default/bin${PATH:+:$PATH}"
-fi
+VENV_DIR="${PROJECT_DIR}/venv"
 
 # Se a chave não estiver exportada no shell atual, tenta carregar do .env seguro.
 if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
@@ -39,4 +35,14 @@ if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
 fi
 
 cd "${PROJECT_DIR}"
-exec nix develop "${PROJECT_DIR}" --command python3 "${PROJECT_DIR}/server.py"
+
+# Preferência: ambiente virtual local (100% local, sem Nix)
+if [[ -d "${VENV_DIR}" && -x "${VENV_DIR}/bin/python3" ]]; then
+  echo "[run-jev-proxy] Usando ambiente virtual local: ${VENV_DIR}"
+  exec "${VENV_DIR}/bin/python3" "${PROJECT_DIR}/server.py"
+fi
+
+# Fallback: Python do sistema (requer pacotes instalados globalmente)
+echo "[run-jev-proxy] Usando Python do sistema."
+echo "[run-jev-proxy] Dica: crie um venv local com: python3 -m venv venv && venv/bin/pip install -r requirements.txt"
+exec python3 "${PROJECT_DIR}/server.py"
