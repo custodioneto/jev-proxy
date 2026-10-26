@@ -5,8 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/tmux new-session -d -s jev-proxy %h/.local/bin/run-jev-proxy
-ExecStop=-/usr/bin/tmux kill-session -t jev-proxy
+ExecStart=%h/.local/bin/run-jev-proxy
 Restart=on-failure
 RestartSec=10
 
