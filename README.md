@@ -123,7 +123,7 @@ Após recarregar o `.bashrc`, os comandos abaixo estão disponíveis:
 - `jev-restart`
 - `jev-enable-autostart`
 - `jev-disable-autostart`
-- `jev-help` (ou `jev-hlp`)
+- `jev-help`
 
 #### Open WebUI
 
@@ -133,7 +133,7 @@ Após recarregar o `.bashrc`, os comandos abaixo estão disponíveis:
 - `webui-restart`
 - `webui-enable-autostart`
 - `webui-disable-autostart`
-- `webui-help` (ou `webui-hlp`)
+- `webui-help`
 
 #### DeepSeek Harness
 
@@ -143,7 +143,7 @@ Após recarregar o `.bashrc`, os comandos abaixo estão disponíveis:
 - `dsh-restart`
 - `dsh-enable-autostart`
 - `dsh-disable-autostart`
-- `dsh-help` (ou `dsh-hlp`)
+- `dsh-help`
 
 ## Como usar
 
