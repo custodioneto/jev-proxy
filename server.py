@@ -11,7 +11,7 @@ from typing import AsyncGenerator, Any
 
 import httpx
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -34,6 +34,81 @@ MODEL_VISION = os.getenv("MODEL_VISION", "openai/gpt-4o-mini")
 JEV_ENDPOINT_URL = os.getenv("JEV_ENDPOINT_URL", "https://api.typesafe.ai/v1/decision")
 
 app = FastAPI(title="jev-proxy", version="3.1.0")
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def root():
+    """Página inicial amigável com links para documentação e endpoints."""
+    return """
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>jev-proxy</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                max-width: 720px;
+                margin: 4rem auto;
+                padding: 0 1.5rem;
+                line-height: 1.6;
+                color: #e4e4e7;
+                background: #18181b;
+            }
+            h1 { color: #22c55e; }
+            a { color: #38bdf8; text-decoration: none; }
+            a:hover { text-decoration: underline; }
+            .card {
+                background: #27272a;
+                border-radius: 0.75rem;
+                padding: 1.5rem;
+                margin-top: 1.5rem;
+                border: 1px solid #3f3f46;
+            }
+            code {
+                background: #3f3f46;
+                padding: 0.2rem 0.4rem;
+                border-radius: 0.375rem;
+                font-size: 0.9em;
+            }
+            ul { padding-left: 1.25rem; }
+            li { margin: 0.5rem 0; }
+        </style>
+    </head>
+    <body>
+        <h1>jev-proxy</h1>
+        <p>Proxy/roteador inteligente OpenAI-compatível para APIs de LLM.</p>
+
+        <div class="card">
+            <h2>Documentação interativa</h2>
+            <ul>
+                <li><a href="/docs">Swagger UI (/docs)</a> — testar endpoints</li>
+                <li><a href="/redoc">ReDoc (/redoc)</a> — documentação alternativa</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>Endpoints principais</h2>
+            <ul>
+                <li><code>GET /v1/models</code> — listar modelos disponíveis</li>
+                <li><code>POST /v1/chat/completions</code> — chat completions com roteamento TypeSafe Jev</li>
+                <li><code>GET /health</code> — verificar saúde do serviço</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>Integração</h2>
+            <p><strong>Base URL:</strong> <code>http://127.0.0.1:8001/v1</code></p>
+            <p><strong>Modelo:</strong> <code>typesafe-jev-decision</code></p>
+            <p><strong>API Key:</strong> qualquer valor (ex: <code>sk-dummy</code>)</p>
+        </div>
+
+        <p style="margin-top: 2rem; color: #71717a; font-size: 0.9rem;">
+            O proxy ignora a chave enviada pelo cliente e usa a <code>OPENROUTER_API_KEY</code> configurada no host.
+        </p>
+    </body>
+    </html>
+    """
 
 app.add_middleware(
     CORSMiddleware,
