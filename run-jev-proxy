@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve o diretório do projeto a partir da localização deste script.
+# Se estiver em ~/.local/bin, aponta para ~/.local/share/jev-proxy.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "${SCRIPT_DIR}" == "${HOME}/.local/bin" ]]; then
+  PROJECT_DIR="${HOME}/.local/share/jev-proxy"
+else
+  PROJECT_DIR="${SCRIPT_DIR}"
+fi
+
+ENV_FILE="${PROJECT_DIR}/.env"
+
+# Se a chave não estiver exportada no shell atual, tenta carregar do .env seguro.
+if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+  if [[ -f "${ENV_FILE}" ]]; then
+    echo "[run-jev-proxy] OPENROUTER_API_KEY não encontrada no shell; carregando ${ENV_FILE}"
+    set -a
+    # shellcheck source=/dev/null
+    source "${ENV_FILE}"
+    set +a
+  fi
+fi
+
+if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+  echo "[run-jev-proxy] AVISO: OPENROUTER_API_KEY não está configurada."
+  echo "[run-jev-proxy] Defina a variável de ambiente no host ou crie ${ENV_FILE} com:"
+  echo ""
+  echo "    OPENROUTER_API_KEY=sk-or-v1-..."
+  echo ""
+  echo "[run-jev-proxy] Abortando."
+  exit 1
+fi
+
+cd "${PROJECT_DIR}"
+exec nix develop "${PROJECT_DIR}" --command python3 "${PROJECT_DIR}/server.py"
