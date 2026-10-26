@@ -19,6 +19,7 @@ env/
 # Nix
 result
 result-*
+*.lock
 
 # Editor / OS
 .vscode/settings.json
