@@ -1,0 +1,21 @@
+# Copie este arquivo para ~/.config/systemd/user/dsh.service
+# e execute no host real:
+#   systemctl --user daemon-reload
+#   systemctl --user enable dsh.service
+#   systemctl --user start dsh.service
+
+[Unit]
+Description=DeepSeek Harness (DSH) Web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/pnpm/bin/dsh web --no-open
+WorkingDirectory=%h
+Restart=on-failure
+RestartSec=10
+Environment="PATH=%h/.local/share/pnpm/bin:/usr/local/bin:/usr/bin:/bin"
+
+[Install]
+WantedBy=default.target
