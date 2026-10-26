@@ -1,6 +1,6 @@
 # jev-proxy
 
-Micro-servidor proxy/roteador inteligente de LLMs, compatível com a API OpenAI. Centraliza a função **TypeSafe Jev Complexity Router & Arbitrator** para ser usada tanto pelo [Open WebUI](https://openwebui.com/) quanto pelo [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) ou qualquer outro cliente OpenAI-compatible.
+Micro-servidor proxy/roteador inteligente de LLMs, compatível com a API OpenAI. Centraliza a lógica do **TypeSafe Jev Complexity Router & Arbitrator** para ser usada tanto pelo [Open WebUI](https://openwebui.com/) quanto pelo [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) ou qualquer outro cliente OpenAI-compatible.
 
 ## O que faz
 
@@ -30,18 +30,23 @@ A classificação primeiro tenta consultar o motor **TypeSafe Jev** (`https://ap
 - [httpx](https://www.python-httpx.org/)
 - [python-dotenv](https://github.com/theskumar/python-dotenv)
 - [Nix Flakes](https://nixos.wiki/wiki/Flakes) (ambiente de desenvolvimento isolado)
+- [Podman](https://podman.io/) (para Open WebUI, opcional)
+- [systemd](https://systemd.io/) (user services para autostart)
 
 ## Estrutura
 
 ```
 ~/.local/share/jev-proxy/
-├── flake.nix          # devShell Nix com Python 3.12 + dependências
-├── flake.lock         # Lock do Nix
-├── server.py          # Servidor FastAPI / proxy / roteador
-├── .env               # CHAVES REAIS (não versionado)
-├── .env.example       # Template de variáveis
-├── .gitignore         # Garante que .env nunca suba para o repo
-└── README.md          # Este arquivo
+├── flake.nix             # devShell Nix com Python 3.12 + dependências
+├── server.py             # Servidor FastAPI / proxy / roteador
+├── run-jev-proxy         # Launcher que entra no nix develop
+├── .env                  # CHAVES REAIS (não versionado)
+├── .env.example          # Template de variáveis
+├── .gitignore            # Garante que .env nunca suba para o repo
+├── jev-proxy.service     # systemd user service de exemplo
+├── open-webui.service    # systemd user service de exemplo
+├── dsh.service           # systemd user service de exemplo
+└── README.md             # Este arquivo
 ```
 
 > ⚠️ **Nunca commit o arquivo `.env`.** Ele contém suas chaves privadas e já está listado no `.gitignore`.
@@ -66,7 +71,7 @@ cp .env.example .env
 
 ```bash
 mkdir -p ~/.local/bin
-cp run-jev-proxy ~/.local/bin/run-jev-proxy   # se o script estiver no repo
+cp run-jev-proxy ~/.local/bin/run-jev-proxy
 chmod +x ~/.local/bin/run-jev-proxy
 ```
 
@@ -85,17 +90,70 @@ MODEL_LONG_CONTEXT=moonshotai/kimi-k2.7-code
 MODEL_VISION=openai/gpt-4o-mini
 ```
 
+## Inicialização automática (systemd)
+
+Copie os arquivos de serviço para `~/.config/systemd/user/` e ative:
+
+```bash
+cp ~/.local/share/jev-proxy/jev-proxy.service ~/.config/systemd/user/
+cp ~/.local/share/jev-proxy/open-webui.service ~/.config/systemd/user/
+cp ~/.local/share/jev-proxy/dsh.service ~/.config/systemd/user/
+
+systemctl --user daemon-reload
+systemctl --user enable jev-proxy.service
+systemctl --user enable open-webui.service
+systemctl --user enable dsh.service
+
+systemctl --user start jev-proxy.service
+systemctl --user start open-webui.service
+systemctl --user start dsh.service
+```
+
+A ordem de inicialização é respeitada: `jev-proxy` sobe antes do Open WebUI.
+
+### Atalhos no shell
+
+Após recarregar o `.bashrc`, os comandos abaixo estão disponíveis:
+
+#### jev-proxy
+
+- `jev-status`
+- `jev-logs`
+- `jev-stop`
+- `jev-restart`
+- `jev-enable-autostart`
+- `jev-disable-autostart`
+- `jev-help`
+
+#### Open WebUI
+
+- `webui-status`
+- `webui-logs`
+- `webui-stop`
+- `webui-restart`
+- `webui-enable-autostart`
+- `webui-disable-autostart`
+- `webui-help`
+
+#### DeepSeek Harness
+
+- `dsh-status`
+- `dsh-logs`
+- `dsh-stop`
+- `dsh-restart`
+- `dsh-enable-autostart`
+- `dsh-disable-autostart`
+- `dsh-help`
+
 ## Como usar
 
-### Iniciar o servidor
+### Iniciar manualmente
 
 ```bash
 ~/.local/bin/run-jev-proxy
 ```
 
-O servidor sobe em `http://0.0.0.0:8001` e pode ser acessado tanto pelo host quanto por containers/sandboxes do Nix.
-
-### Parar o servidor
+### Parar
 
 ```bash
 pkill -f "python3 .*server.py"
@@ -143,6 +201,13 @@ Os headers de resposta incluem metadados da decisão:
 2. **API URL:** `http://127.0.0.1:8001/v1`
 3. **API Key:** `sk-dummy`
 4. Salve. O modelo `TypeSafe Jev` (`typesafe-jev-decision`) aparecerá no seletor de chats.
+
+Alternativamente, configure o Open WebUI via variáveis de ambiente (exemplo em `open-webui.service`):
+
+```env
+OPENAI_API_BASE_URL=http://127.0.0.1:8001/v1
+OPENAI_API_KEY=sk-dummy
+```
 
 ## Segurança
 

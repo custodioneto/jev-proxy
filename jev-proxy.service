@@ -1,0 +1,14 @@
+[Unit]
+Description=jev-proxy (LLM Router)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/tmux new-session -d -s jev-proxy %h/.local/bin/run-jev-proxy
+ExecStop=-/usr/bin/tmux kill-session -t jev-proxy
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

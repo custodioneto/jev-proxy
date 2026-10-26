@@ -1,0 +1,24 @@
+[Unit]
+Description=Open WebUI
+After=network-online.target jev-proxy.service
+Wants=network-online.target
+Requires=jev-proxy.service
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/podman rm -f open-webui
+ExecStart=/usr/bin/podman run \
+  --rm \
+  --name open-webui \
+  --net=host \
+  --security-opt label=disable \
+  -v %h/.local/share/open-webui/data:/app/backend/data:Z \
+  --env-file %h/.local/share/open-webui/.env \
+  ghcr.io/open-webui/open-webui:main
+ExecStop=-/usr/bin/podman stop -t 30 open-webui
+ExecStopPost=-/usr/bin/podman rm -f open-webui
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
