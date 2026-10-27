@@ -13,10 +13,10 @@ fi
 ENV_FILE="${PROJECT_DIR}/.env"
 VENV_DIR="${PROJECT_DIR}/venv"
 
-# Se a chave não estiver exportada no shell atual, tenta carregar do .env seguro.
+# Se a chave não estiver exportada no shell atual, carrega do .env seguro.
 if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
   if [[ -f "${ENV_FILE}" ]]; then
-    echo "[run-jev-proxy] OPENROUTER_API_KEY não encontrada no shell; carregando ${ENV_FILE}"
+    echo "[run-jev-proxy] Carregando chaves de ${ENV_FILE}"
     set -a
     # shellcheck source=/dev/null
     source "${ENV_FILE}"
