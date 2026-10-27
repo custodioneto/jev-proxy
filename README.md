@@ -164,8 +164,8 @@ Após recarregar o `.bashrc`, os comandos abaixo estão disponíveis:
 | `GET` | `/docs` | Swagger UI interativo (testar endpoints no navegador) |
 | `GET` | `/redoc` | Documentação alternativa em ReDoc |
 | `GET` | `/health` | Healthcheck do serviço |
-| `GET` | `/v1/models` | Lista os modelos do proxy **e todos os modelos do OpenRouter** |
-| `POST` | `/v1/chat/completions` | Chat completion com roteamento TypeSafe Jev ou encaminhamento direto |
+| `GET` | `/v1/models` | Lista o modelo roteador do proxy |
+| `POST` | `/v1/chat/completions` | Chat completion com roteamento TypeSafe Jev (`jev-arbitro`) ou encaminhamento direto |
 
 ## Como usar
 
@@ -196,7 +196,7 @@ curl -X POST http://127.0.0.1:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-dummy" \
   -d '{
-    "model": "typesafe-jev-decision",
+    "model": "jev-arbitro",
     "stream": false,
     "messages": [{"role": "user", "content": "Olá, tudo bem?"}]
   }'
@@ -216,7 +216,7 @@ Os headers de resposta incluem metadados da decisão:
 Configure o provedor OpenAI-compatível apontando para o proxy:
 
 - **Base URL:** `http://127.0.0.1:8001/v1`
-- **Modelo:** `typesafe-jev-decision`
+- **Modelo:** `jev-arbitro`
 - **API Key:** `sk-dummy` (qualquer valor; o proxy usa a chave real do `.env`)
 
 Ou aplique a configuração via patch do DSH (`~/.dsh/profiles/web/cordis.patch.yml`):
@@ -235,7 +235,7 @@ Ou aplique a configuração via patch do DSH (`~/.dsh/profiles/web/cordis.patch.
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
     provider: jev-proxy
-    model: typesafe-jev-decision
+    model: jev-arbitro
 ```
 
 E adicione a credencial em `~/.dsh/.credentials.yaml`:
@@ -247,21 +247,36 @@ refs:
 
 ### Open WebUI
 
+#### 1. jev-proxy (roteador)
+
 1. Vá em **Admin Settings → Connections → OpenAI API**.
 2. **API URL:** `http://127.0.0.1:8001/v1`
 3. **API Key:** `sk-dummy`
-4. Salve. No seletor de chats aparecerão:
-   - `typesafe-jev-decision` — roteador inteligente que escolhe o modelo do OpenRouter automaticamente
-   - `jev-arbitro` — alias para o mesmo roteador (mesmo comportamento)
-   - todos os seus modelos diretos do OpenRouter (ex: `moonshotai/kimi-k2.7-code`, `openai/gpt-4o`, etc.)
+4. Salve. No seletor de chats aparecerá `jev-arbitro`.
 
-> Quando você escolhe um modelo direto do OpenRouter, o proxy apenas encaminha a requisição. Quando escolhe `typesafe-jev-decision`/`jev-arbitro`, o proxy decide o modelo com base no conteúdo da mensagem.
+> `jev-arbitro` analisa sua mensagem e escolhe automaticamente o melhor modelo do OpenRouter.
 
-Alternativamente, configure o Open WebUI via variáveis de ambiente (exemplo em `open-webui.service`):
+#### 2. OpenRouter direto (todos os modelos)
+
+Para ter a lista completa de modelos do OpenRouter disponível no seletor:
+
+1. Vá em **Admin Settings → Connections → OpenAI API**.
+2. Clique em **Add Connection** (ou adicione outra conexão OpenAI API).
+3. Preencha:
+   - **API URL:** `https://openrouter.ai/api/v1`
+   - **API Key:** sua chave real do OpenRouter (`sk-or-v1-...`)
+4. Salve.
+
+Agora o seletor mostrará tanto `jev-arbitro` quanto todos os modelos do OpenRouter.
+
+Alternativamente, configure as variáveis de ambiente (exemplo em `open-webui.service`):
 
 ```env
+# jev-proxy
 OPENAI_API_BASE_URL=http://127.0.0.1:8001/v1
 OPENAI_API_KEY=sk-dummy
+
+# OpenRouter direto (adicione via UI ou outra conexão)
 ```
 
 ## Segurança

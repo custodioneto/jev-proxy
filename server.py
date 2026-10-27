@@ -7,7 +7,6 @@ do Open WebUI, centralizando-a como um endpoint OpenAI-compatível.
 
 import os
 import json
-import time
 from typing import AsyncGenerator, Any
 
 import httpx
@@ -24,11 +23,6 @@ APP_PORT = int(os.getenv("JEV_PROXY_PORT", "8001"))
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 OPENROUTER_CHAT_URL = f"{OPENROUTER_BASE}/chat/completions"
-OPENROUTER_MODELS_URL = f"{OPENROUTER_BASE}/models"
-
-# Cache simples para a lista de modelos do OpenRouter (60 segundos)
-_models_cache: dict[str, Any] = {"data": [], "ts": 0}
-MODELS_CACHE_TTL = 60
 
 # Modelos padrão (podem ser sobrescritos por variáveis de ambiente)
 MODEL_SIMPLE = os.getenv("MODEL_SIMPLE", "openai/gpt-4o-mini")
@@ -105,7 +99,7 @@ async def root():
         <div class="card">
             <h2>Integração</h2>
             <p><strong>Base URL:</strong> <code>http://127.0.0.1:8001/v1</code></p>
-            <p><strong>Modelo:</strong> <code>typesafe-jev-decision</code></p>
+            <p><strong>Modelo:</strong> <code>jev-arbitro</code></p>
             <p><strong>API Key:</strong> qualquer valor (ex: <code>sk-dummy</code>)</p>
         </div>
 
@@ -276,32 +270,6 @@ def _get_openrouter_headers() -> dict[str, str]:
     }
 
 
-async def _fetch_openrouter_models() -> list[dict[str, Any]]:
-    """Busca modelos disponíveis no OpenRouter com cache TTL."""
-    now = time.time()
-    if now - _models_cache["ts"] < MODELS_CACHE_TTL:
-        return _models_cache["data"]
-
-    api_key = _get_openrouter_api_key()
-    headers = {"Accept": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(OPENROUTER_MODELS_URL, headers=headers)
-            if resp.status_code == 200:
-                data = resp.json()
-                models = data.get("data", [])
-                _models_cache["data"] = models
-                _models_cache["ts"] = now
-                return models
-    except Exception:
-        pass
-
-    return _models_cache.get("data", [])
-
-
 async def _forward_chat_to_openrouter(
     upstream_payload: dict[str, Any],
     extra_headers: dict[str, str] | None = None,
@@ -359,31 +327,17 @@ async def _forward_chat_to_openrouter(
 
 @app.get("/v1/models")
 async def list_models():
-    """Expõe os modelos do proxy e os modelos disponíveis no OpenRouter."""
-    jev_models = [
-        {
-            "id": "typesafe-jev-decision",
-            "object": "model",
-            "created": 1700000000,
-            "owned_by": "jev-proxy",
-        },
-        {
-            "id": "jev-arbitro",
-            "object": "model",
-            "created": 1700000000,
-            "owned_by": "jev-proxy",
-        },
-    ]
-
-    or_models = await _fetch_openrouter_models()
-    or_ids = {m.get("id") for m in or_models}
-
-    # Evita duplicar caso o OpenRouter tenha modelos com os mesmos ids
-    merged = jev_models + [m for m in or_models if m.get("id") not in or_ids]
-
+    """Expõe o modelo roteador do proxy."""
     return {
         "object": "list",
-        "data": merged,
+        "data": [
+            {
+                "id": "jev-arbitro",
+                "object": "model",
+                "created": 1700000000,
+                "owned_by": "jev-proxy",
+            },
+        ],
     }
 
 
@@ -402,7 +356,7 @@ async def chat_completions(request: Request):
     requested_model = body.get("model", "")
 
     # Se o cliente escolheu um modelo específico do OpenRouter, encaminha direto
-    if requested_model not in ("typesafe-jev-decision", "jev-arbitro"):
+    if requested_model != "jev-arbitro":
         upstream_payload = dict(body)
         upstream_payload.setdefault("temperature", 0.2)
         return await _forward_chat_to_openrouter(upstream_payload)
