@@ -164,8 +164,8 @@ Após recarregar o `.bashrc`, os comandos abaixo estão disponíveis:
 | `GET` | `/docs` | Swagger UI interativo (testar endpoints no navegador) |
 | `GET` | `/redoc` | Documentação alternativa em ReDoc |
 | `GET` | `/health` | Healthcheck do serviço |
-| `GET` | `/v1/models` | Lista os modelos expostos pelo proxy |
-| `POST` | `/v1/chat/completions` | Chat completion com roteamento TypeSafe Jev |
+| `GET` | `/v1/models` | Lista os modelos do proxy **e todos os modelos do OpenRouter** |
+| `POST` | `/v1/chat/completions` | Chat completion com roteamento TypeSafe Jev ou encaminhamento direto |
 
 ## Como usar
 
@@ -213,16 +213,49 @@ Os headers de resposta incluem metadados da decisão:
 
 ### DeepSeek Harness
 
+Configure o provedor OpenAI-compatível apontando para o proxy:
+
 - **Base URL:** `http://127.0.0.1:8001/v1`
 - **Modelo:** `typesafe-jev-decision`
 - **API Key:** `sk-dummy` (qualquer valor; o proxy usa a chave real do `.env`)
+
+Ou aplique a configuração via patch do DSH (`~/.dsh/profiles/web/cordis.patch.yml`):
+
+```yaml
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      openrouter:
+        apiKeyEnv: OPENROUTER_API_KEY
+      jev-proxy:
+        baseURL: http://127.0.0.1:8001/v1
+        apiKeyEnv: JEV_PROXY_API_KEY
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: jev-proxy
+    model: typesafe-jev-decision
+```
+
+E adicione a credencial em `~/.dsh/.credentials.yaml`:
+
+```yaml
+refs:
+  JEV_PROXY_API_KEY: sk-dummy
+```
 
 ### Open WebUI
 
 1. Vá em **Admin Settings → Connections → OpenAI API**.
 2. **API URL:** `http://127.0.0.1:8001/v1`
 3. **API Key:** `sk-dummy`
-4. Salve. O modelo `TypeSafe Jev` (`typesafe-jev-decision`) aparecerá no seletor de chats.
+4. Salve. No seletor de chats aparecerão:
+   - `typesafe-jev-decision` — roteador inteligente que escolhe o modelo do OpenRouter automaticamente
+   - `jev-arbitro` — alias para o mesmo roteador (mesmo comportamento)
+   - todos os seus modelos diretos do OpenRouter (ex: `moonshotai/kimi-k2.7-code`, `openai/gpt-4o`, etc.)
+
+> Quando você escolhe um modelo direto do OpenRouter, o proxy apenas encaminha a requisição. Quando escolhe `typesafe-jev-decision`/`jev-arbitro`, o proxy decide o modelo com base no conteúdo da mensagem.
 
 Alternativamente, configure o Open WebUI via variáveis de ambiente (exemplo em `open-webui.service`):
 

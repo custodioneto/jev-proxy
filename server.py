@@ -7,6 +7,7 @@ do Open WebUI, centralizando-a como um endpoint OpenAI-compatível.
 
 import os
 import json
+import time
 from typing import AsyncGenerator, Any
 
 import httpx
@@ -23,6 +24,11 @@ APP_PORT = int(os.getenv("JEV_PROXY_PORT", "8001"))
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 OPENROUTER_CHAT_URL = f"{OPENROUTER_BASE}/chat/completions"
+OPENROUTER_MODELS_URL = f"{OPENROUTER_BASE}/models"
+
+# Cache simples para a lista de modelos do OpenRouter (60 segundos)
+_models_cache: dict[str, Any] = {"data": [], "ts": 0}
+MODELS_CACHE_TTL = 60
 
 # Modelos padrão (podem ser sobrescritos por variáveis de ambiente)
 MODEL_SIMPLE = os.getenv("MODEL_SIMPLE", "openai/gpt-4o-mini")
@@ -259,75 +265,50 @@ def _get_openrouter_api_key() -> str | None:
     return os.getenv("OPENROUTER_API_KEY")
 
 
-@app.get("/v1/models")
-async def list_models():
-    """Expõe os modelos que o proxy representa."""
+def _get_openrouter_headers() -> dict[str, str]:
+    """Headers para chamadas ao OpenRouter."""
     return {
-        "object": "list",
-        "data": [
-            {
-                "id": "typesafe-jev-decision",
-                "object": "model",
-                "created": 1700000000,
-                "owned_by": "jev-proxy",
-            },
-            {
-                "id": "jev-arbitro",
-                "object": "model",
-                "created": 1700000000,
-                "owned_by": "jev-proxy",
-            },
-        ],
-    }
-
-
-@app.post("/v1/chat/completions")
-async def chat_completions(request: Request):
-    """Proxy OpenAI com roteamento TypeSafe Jev para OpenRouter."""
-    try:
-        body = await request.json()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Corpo JSON inválido: {exc}")
-
-    messages = body.get("messages")
-    if not isinstance(messages, list) or not messages:
-        raise HTTPException(status_code=400, detail="O campo 'messages' deve ser uma lista não vazia.")
-
-    user_query = _extract_text(messages[-1].get("content", ""))
-    has_image = _has_images(messages)
-
-    async with httpx.AsyncClient() as client:
-        decision = await _classify_with_jev(client, user_query, has_image=has_image)
-
-    target_model = decision["target_model"]
-
-    api_key = _get_openrouter_api_key()
-    if not api_key:
-        raise HTTPException(
-            status_code=500,
-            detail="OPENROUTER_API_KEY não configurada. Defina a variável de ambiente no host ou no arquivo .env.",
-        )
-
-    upstream_payload = dict(body)
-    upstream_payload["model"] = target_model
-    # Garante temperature padrão se ausente, mantendo compatibilidade com a função original
-    upstream_payload.setdefault("temperature", 0.2)
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": f"Bearer {_get_openrouter_api_key()}",
         "Content-Type": "application/json",
         "Accept": "application/json",
         "HTTP-Referer": "http://localhost:8001",
         "X-Title": "jev-proxy",
     }
 
-    decision_headers = {
-        "X-Jev-Tier": str(decision["tier"]),
-        "X-Jev-Model": target_model,
-        "X-Jev-Confidence": str(decision["confidence"]),
-        "X-Jev-Reason": str(decision["reason"]),
-    }
 
+async def _fetch_openrouter_models() -> list[dict[str, Any]]:
+    """Busca modelos disponíveis no OpenRouter com cache TTL."""
+    now = time.time()
+    if now - _models_cache["ts"] < MODELS_CACHE_TTL:
+        return _models_cache["data"]
+
+    api_key = _get_openrouter_api_key()
+    headers = {"Accept": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(OPENROUTER_MODELS_URL, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                models = data.get("data", [])
+                _models_cache["data"] = models
+                _models_cache["ts"] = now
+                return models
+    except Exception:
+        pass
+
+    return _models_cache.get("data", [])
+
+
+async def _forward_chat_to_openrouter(
+    upstream_payload: dict[str, Any],
+    extra_headers: dict[str, str] | None = None,
+) -> StreamingResponse | JSONResponse:
+    """Encaminha um chat completion para o OpenRouter, streaming ou não."""
+    headers = _get_openrouter_headers()
+    decision_headers = extra_headers or {}
     is_stream = bool(upstream_payload.get("stream", False))
 
     if is_stream:
@@ -374,6 +355,86 @@ async def chat_completions(request: Request):
         status_code=response.status_code,
         headers=decision_headers,
     )
+
+
+@app.get("/v1/models")
+async def list_models():
+    """Expõe os modelos do proxy e os modelos disponíveis no OpenRouter."""
+    jev_models = [
+        {
+            "id": "typesafe-jev-decision",
+            "object": "model",
+            "created": 1700000000,
+            "owned_by": "jev-proxy",
+        },
+        {
+            "id": "jev-arbitro",
+            "object": "model",
+            "created": 1700000000,
+            "owned_by": "jev-proxy",
+        },
+    ]
+
+    or_models = await _fetch_openrouter_models()
+    or_ids = {m.get("id") for m in or_models}
+
+    # Evita duplicar caso o OpenRouter tenha modelos com os mesmos ids
+    merged = jev_models + [m for m in or_models if m.get("id") not in or_ids]
+
+    return {
+        "object": "list",
+        "data": merged,
+    }
+
+
+@app.post("/v1/chat/completions")
+async def chat_completions(request: Request):
+    """Proxy OpenAI com roteamento TypeSafe Jev ou encaminhamento direto para OpenRouter."""
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Corpo JSON inválido: {exc}")
+
+    messages = body.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise HTTPException(status_code=400, detail="O campo 'messages' deve ser uma lista não vazia.")
+
+    requested_model = body.get("model", "")
+
+    # Se o cliente escolheu um modelo específico do OpenRouter, encaminha direto
+    if requested_model not in ("typesafe-jev-decision", "jev-arbitro"):
+        upstream_payload = dict(body)
+        upstream_payload.setdefault("temperature", 0.2)
+        return await _forward_chat_to_openrouter(upstream_payload)
+
+    # Roteamento TypeSafe Jev
+    user_query = _extract_text(messages[-1].get("content", ""))
+    has_image = _has_images(messages)
+
+    async with httpx.AsyncClient() as client:
+        decision = await _classify_with_jev(client, user_query, has_image=has_image)
+
+    target_model = decision["target_model"]
+
+    api_key = _get_openrouter_api_key()
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="OPENROUTER_API_KEY não configurada. Defina a variável de ambiente no host ou no arquivo .env.",
+        )
+
+    upstream_payload = dict(body)
+    upstream_payload["model"] = target_model
+    upstream_payload.setdefault("temperature", 0.2)
+
+    decision_headers = {
+        "X-Jev-Tier": str(decision["tier"]),
+        "X-Jev-Model": target_model,
+        "X-Jev-Confidence": str(decision["confidence"]),
+        "X-Jev-Reason": str(decision["reason"]),
+    }
+
+    return await _forward_chat_to_openrouter(upstream_payload, decision_headers)
 
 
 @app.get("/health")
