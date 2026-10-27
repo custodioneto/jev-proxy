@@ -23,6 +23,11 @@ APP_PORT = int(os.getenv("JEV_PROXY_PORT", "8001"))
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 OPENROUTER_CHAT_URL = f"{OPENROUTER_BASE}/chat/completions"
+OPENROUTER_MODELS_URL = f"{OPENROUTER_BASE}/models"
+
+import time
+_models_cache: dict[str, Any] = {"data": [], "ts": 0}
+MODELS_CACHE_TTL = int(os.getenv("OPENROUTER_MODELS_CACHE_TTL", "60"))
 
 # Modelos padrão (podem ser sobrescritos por variáveis de ambiente)
 MODEL_SIMPLE = os.getenv("MODEL_SIMPLE", "openai/gpt-4o-mini")
@@ -270,6 +275,32 @@ def _get_openrouter_headers() -> dict[str, str]:
     }
 
 
+async def _fetch_openrouter_models() -> list[dict[str, Any]]:
+    """Busca modelos disponíveis no OpenRouter com cache TTL simples."""
+    now = time.time()
+    if now - _models_cache["ts"] < MODELS_CACHE_TTL:
+        return _models_cache["data"]
+
+    api_key = _get_openrouter_api_key()
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(OPENROUTER_MODELS_URL, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                models = data.get("data", [])
+                _models_cache["data"] = models
+                _models_cache["ts"] = now
+                return models
+    except Exception:
+        pass
+
+    return _models_cache["data"]
+
+
 async def _forward_chat_to_openrouter(
     upstream_payload: dict[str, Any],
     extra_headers: dict[str, str] | None = None,
@@ -327,17 +358,24 @@ async def _forward_chat_to_openrouter(
 
 @app.get("/v1/models")
 async def list_models():
-    """Expõe o modelo roteador do proxy."""
+    """Expõe jev-arbitro (roteador) e encaminha a lista de modelos do OpenRouter."""
+    jev_models = [
+        {
+            "id": "jev-arbitro",
+            "object": "model",
+            "created": 1700000000,
+            "owned_by": "jev-proxy",
+        },
+    ]
+
+    or_models = await _fetch_openrouter_models()
+    or_ids = {m.get("id") for m in or_models}
+
+    merged = jev_models + [m for m in or_models if m.get("id") not in or_ids]
+
     return {
         "object": "list",
-        "data": [
-            {
-                "id": "jev-arbitro",
-                "object": "model",
-                "created": 1700000000,
-                "owned_by": "jev-proxy",
-            },
-        ],
+        "data": merged,
     }
 
 

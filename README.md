@@ -164,7 +164,7 @@ Após recarregar o `.bashrc`, os comandos abaixo estão disponíveis:
 | `GET` | `/docs` | Swagger UI interativo (testar endpoints no navegador) |
 | `GET` | `/redoc` | Documentação alternativa em ReDoc |
 | `GET` | `/health` | Healthcheck do serviço |
-| `GET` | `/v1/models` | Lista o modelo roteador do proxy |
+| `GET` | `/v1/models` | Lista `jev-arbitro` e encaminha a lista de modelos do OpenRouter |
 | `POST` | `/v1/chat/completions` | Chat completion com roteamento TypeSafe Jev (`jev-arbitro`) ou encaminhamento direto |
 
 ## Como usar
@@ -227,12 +227,20 @@ Ou aplique a configuração via patch do DSH (`~/.dsh/profiles/web/cordis.patch.
   config:
     providers:
       openrouter:
+        displayName: OpenRouter
+        api: openai-completions
+        baseURL: https://openrouter.ai/api/v1
         apiKeyEnv: OPENROUTER_API_KEY
       jev-proxy:
         displayName: jev-proxy
-        api: openai
+        api: openai-completions
         baseURL: http://127.0.0.1:8001/v1
         apiKeyEnv: JEV_PROXY_API_KEY
+        modelOverrides:
+          jev-arbitro:
+            displayName: jev-arbitro
+            contextWindow: 128000
+            maxTokens: 32768
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
