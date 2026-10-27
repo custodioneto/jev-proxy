@@ -229,6 +229,8 @@ Ou aplique a configuração via patch do DSH (`~/.dsh/profiles/web/cordis.patch.
       openrouter:
         apiKeyEnv: OPENROUTER_API_KEY
       jev-proxy:
+        displayName: jev-proxy
+        api: openai
         baseURL: http://127.0.0.1:8001/v1
         apiKeyEnv: JEV_PROXY_API_KEY
 - id: agent-default-model
