@@ -32,15 +32,16 @@ MODELS_CACHE_TTL = int(os.getenv("OPENROUTER_MODELS_CACHE_TTL", "60"))
 
 
 def _safe_header(value: Any) -> str:
-    """Sanitiza valores de header HTTP para latin-1.
+    """Sanitiza valores de header HTTP para ASCII puro.
 
-    Clientes como o Open WebUI (Starlette) reencodam os headers do upstream
-    em latin-1 e quebram com Unicode decomposto (ex.: 'c' + U+0327 cedilha)
-    ou qualquer caractere fora do range 0-255. Normalizamos para NFC e
-    substituímos o que ainda assim não couber em latin-1.
+    Clientes como o Open WebUI decodificam headers do upstream como UTF-8;
+    bytes latin-1 (ex.: 0xE7 = 'ç') viram U+FFFD e quebram o Starlette ao
+    reencodar ('latin-1' codec can't encode: ordinal not in range(256)).
+    NFKD decompõe acentos (ç -> c + cedilha) e 'ignore' remove as marcas,
+    produzindo ASCII seguro para qualquer cliente HTTP.
     """
-    normalized = unicodedata.normalize("NFC", str(value))
-    return normalized.encode("latin-1", errors="replace").decode("latin-1")
+    normalized = unicodedata.normalize("NFKD", str(value))
+    return normalized.encode("ascii", errors="ignore").decode("ascii")
 
 # Modelos padrão (podem ser sobrescritos por variáveis de ambiente)
 # Hierarquia do árbitro (por precedência):
