@@ -427,13 +427,10 @@ async def chat_completions(request: Request):
     has_image = _has_images(messages)
     has_tools = _has_tools(body)
 
-    print(f"[jev-proxy] Requisição jev-arbitro - has_tools={has_tools}, query={user_query[:60]!r}")
-
     async with httpx.AsyncClient() as client:
         decision = await _classify_with_jev(client, user_query, has_image=has_image, has_tools=has_tools)
 
     target_model = decision["target_model"]
-    print(f"[jev-proxy] Decisão: tier={decision['tier']}, model={target_model}, reason={decision['reason']}")
 
     api_key = _get_openrouter_api_key()
     if not api_key:
