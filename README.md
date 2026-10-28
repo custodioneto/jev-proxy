@@ -94,7 +94,7 @@ TYPESAFE_API_KEY=vcp-sua-chave-typesafe
 
 JEV_ENDPOINT_URL=https://api.typesafe.ai/v1/decision
 
-MODEL_SIMPLE=openai/gpt-4o-mini
+MODEL_SIMPLE=google/gemini-flash-1.5
 MODEL_INTERMEDIATE=qwen/qwen-2.5-coder-32b-instruct
 MODEL_COMPLEX=moonshotai/kimi-k3
 MODEL_LONG_CONTEXT=moonshotai/kimi-k2.7-code

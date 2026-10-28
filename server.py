@@ -30,7 +30,7 @@ _models_cache: dict[str, Any] = {"data": [], "ts": 0}
 MODELS_CACHE_TTL = int(os.getenv("OPENROUTER_MODELS_CACHE_TTL", "60"))
 
 # Modelos padrão (podem ser sobrescritos por variáveis de ambiente)
-MODEL_SIMPLE = os.getenv("MODEL_SIMPLE", "openai/gpt-4o-mini")
+MODEL_SIMPLE = os.getenv("MODEL_SIMPLE", "google/gemini-flash-1.5")
 MODEL_INTERMEDIATE = os.getenv("MODEL_INTERMEDIATE", "qwen/qwen-2.5-coder-32b-instruct")
 MODEL_COMPLEX = os.getenv("MODEL_COMPLEX", "deepseek/deepseek-r1")
 MODEL_LONG_CONTEXT = os.getenv("MODEL_LONG_CONTEXT", "moonshotai/kimi-k3")
@@ -168,7 +168,14 @@ def _has_images(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _estimate_local_complexity(prompt: str, has_image: bool = False) -> dict[str, Any]:
+def _has_tools(payload: dict[str, Any]) -> bool:
+    """Verifica se a requisição contém tools/functions."""
+    return bool(payload.get("tools") or payload.get("functions"))
+
+
+def _estimate_local_complexity(
+    prompt: str, has_image: bool = False, has_tools: bool = False
+) -> dict[str, Any]:
     """Classificador heurístico determinístico caso o endpoint remoto do Jev oscile."""
     if has_image:
         return {
@@ -180,6 +187,16 @@ def _estimate_local_complexity(prompt: str, has_image: bool = False) -> dict[str
 
     prompt_lower = prompt.lower()
     length = len(prompt)
+
+    # Regra de segurança: mensagens com tools nunca usam o modelo SIMPLE,
+    # mesmo que sejam saudações curtas.
+    if has_tools:
+        return {
+            "tier": "INTERMEDIATE_CODE",
+            "target_model": MODEL_INTERMEDIATE,
+            "confidence": 0.95,
+            "reason": "Requisição contém tools/functions. Roteado para modelo com suporte garantido a tool use.",
+        }
 
     # Regra 1: Saudações ou perguntas muito curtas
     if length < 80 and any(w in prompt_lower for w in SIMPLE_KEYWORDS):
@@ -218,15 +235,15 @@ def _estimate_local_complexity(prompt: str, has_image: bool = False) -> dict[str
 
 
 async def _classify_with_jev(
-    client: httpx.AsyncClient, prompt: str, has_image: bool = False
+    client: httpx.AsyncClient, prompt: str, has_image: bool = False, has_tools: bool = False
 ) -> dict[str, Any]:
     """Consulta o motor TypeSafe Jev; em caso de falha, usa classificador local."""
     if has_image:
-        return _estimate_local_complexity(prompt, has_image=True)
+        return _estimate_local_complexity(prompt, has_image=True, has_tools=has_tools)
 
     api_key = os.getenv("TYPESAFE_API_KEY")
     if not api_key:
-        return _estimate_local_complexity(prompt, has_image=False)
+        return _estimate_local_complexity(prompt, has_image=False, has_tools=has_tools)
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -256,7 +273,7 @@ async def _classify_with_jev(
     except Exception:
         pass
 
-    return _estimate_local_complexity(prompt, has_image=False)
+    return _estimate_local_complexity(prompt, has_image=False, has_tools=has_tools)
 
 
 def _get_openrouter_api_key() -> str | None:
@@ -402,9 +419,10 @@ async def chat_completions(request: Request):
     # Roteamento TypeSafe Jev
     user_query = _extract_text(messages[-1].get("content", ""))
     has_image = _has_images(messages)
+    has_tools = _has_tools(body)
 
     async with httpx.AsyncClient() as client:
-        decision = await _classify_with_jev(client, user_query, has_image=has_image)
+        decision = await _classify_with_jev(client, user_query, has_image=has_image, has_tools=has_tools)
 
     target_model = decision["target_model"]
 
