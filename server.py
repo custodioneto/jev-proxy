@@ -31,18 +31,20 @@ MODELS_CACHE_TTL = int(os.getenv("OPENROUTER_MODELS_CACHE_TTL", "60"))
 
 # Modelos padrão (podem ser sobrescritos por variáveis de ambiente)
 # Hierarquia do árbitro (por precedência):
-#   1. Imagens      -> MODEL_VISION
-#   2. Tools        -> MODEL_TOOL_USE
-#   3. Contexto longo -> MODEL_LONG_CONTEXT
-#   4. Complexidade alta -> MODEL_COMPLEX
-#   5. Código intermediário -> MODEL_INTERMEDIATE
-#   6. Trivial      -> MODEL_SIMPLE
+#   1. Imagens + tools -> MODEL_TOOL_USE_VISION (suporta ambos)
+#   2. Tools            -> MODEL_TOOL_USE
+#   3. Imagens          -> MODEL_VISION
+#   4. Contexto longo   -> MODEL_LONG_CONTEXT
+#   5. Alta complexidade -> MODEL_COMPLEX
+#   6. Código intermediário -> MODEL_INTERMEDIATE
+#   7. Trivial          -> MODEL_SIMPLE
 MODEL_SIMPLE = os.getenv("MODEL_SIMPLE", "qwen/qwen-2.5-7b-instruct")
 MODEL_INTERMEDIATE = os.getenv("MODEL_INTERMEDIATE", "qwen/qwen-2.5-coder-32b-instruct")
 MODEL_COMPLEX = os.getenv("MODEL_COMPLEX", "moonshotai/kimi-k3")
 MODEL_LONG_CONTEXT = os.getenv("MODEL_LONG_CONTEXT", "moonshotai/kimi-k2.7-code")
 MODEL_VISION = os.getenv("MODEL_VISION", "qwen/qwen-2.5-vl-72b-instruct")
 MODEL_TOOL_USE = os.getenv("MODEL_TOOL_USE", "deepseek/deepseek-chat")
+MODEL_TOOL_USE_VISION = os.getenv("MODEL_TOOL_USE_VISION", "moonshotai/kimi-k3")
 
 JEV_ENDPOINT_URL = os.getenv("JEV_ENDPOINT_URL", "https://api.typesafe.ai/v1/decision")
 
@@ -189,6 +191,15 @@ def _estimate_local_complexity(
     prompt: str, has_image: bool = False, has_tools: bool = False
 ) -> dict[str, Any]:
     """Classificador heurístico determinístico caso o endpoint remoto do Jev oscile."""
+    # Regra de segurança: tools + imagem precisam de modelo que suporte ambos.
+    if has_tools and has_image:
+        return {
+            "tier": "TOOL_USE_VISION",
+            "target_model": MODEL_TOOL_USE_VISION,
+            "confidence": 0.98,
+            "reason": "Requisição contém tools e imagens. Roteado para modelo com suporte a ambos.",
+        }
+
     if has_image:
         return {
             "tier": "MULTIMODAL_VISION",
@@ -251,8 +262,11 @@ async def _classify_with_jev(
     client: httpx.AsyncClient, prompt: str, has_image: bool = False, has_tools: bool = False
 ) -> dict[str, Any]:
     """Consulta o motor TypeSafe Jev; em caso de falha, usa classificador local."""
+    if has_tools and has_image:
+        return _estimate_local_complexity(prompt, has_image=True, has_tools=True)
+
     if has_image:
-        return _estimate_local_complexity(prompt, has_image=True, has_tools=has_tools)
+        return _estimate_local_complexity(prompt, has_image=True, has_tools=False)
 
     api_key = os.getenv("TYPESAFE_API_KEY")
     if not api_key:
@@ -272,6 +286,7 @@ async def _classify_with_jev(
             {"tier": "LONG_CONTEXT", "model": MODEL_LONG_CONTEXT},
             {"tier": "TOOL_USE", "model": MODEL_TOOL_USE},
             {"tier": "MULTIMODAL_VISION", "model": MODEL_VISION},
+            {"tier": "TOOL_USE_VISION", "model": MODEL_TOOL_USE_VISION},
         ],
     }
 
