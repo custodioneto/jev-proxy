@@ -30,12 +30,19 @@ _models_cache: dict[str, Any] = {"data": [], "ts": 0}
 MODELS_CACHE_TTL = int(os.getenv("OPENROUTER_MODELS_CACHE_TTL", "60"))
 
 # Modelos padrão (podem ser sobrescritos por variáveis de ambiente)
-MODEL_SIMPLE = os.getenv("MODEL_SIMPLE", "google/gemini-flash-1.5")
+# Hierarquia do árbitro (por precedência):
+#   1. Imagens      -> MODEL_VISION
+#   2. Tools        -> MODEL_TOOL_USE
+#   3. Contexto longo -> MODEL_LONG_CONTEXT
+#   4. Complexidade alta -> MODEL_COMPLEX
+#   5. Código intermediário -> MODEL_INTERMEDIATE
+#   6. Trivial      -> MODEL_SIMPLE
+MODEL_SIMPLE = os.getenv("MODEL_SIMPLE", "qwen/qwen-2.5-7b-instruct")
 MODEL_INTERMEDIATE = os.getenv("MODEL_INTERMEDIATE", "qwen/qwen-2.5-coder-32b-instruct")
 MODEL_COMPLEX = os.getenv("MODEL_COMPLEX", "deepseek/deepseek-r1")
-MODEL_LONG_CONTEXT = os.getenv("MODEL_LONG_CONTEXT", "moonshotai/kimi-k3")
-MODEL_VISION = os.getenv("MODEL_VISION", "openai/gpt-4o-mini")
-MODEL_TOOL_USE = os.getenv("MODEL_TOOL_USE", "moonshotai/kimi-k2.7-code")
+MODEL_LONG_CONTEXT = os.getenv("MODEL_LONG_CONTEXT", "moonshotai/kimi-k2.7-code")
+MODEL_VISION = os.getenv("MODEL_VISION", "qwen/qwen-2.5-vl-72b-instruct")
+MODEL_TOOL_USE = os.getenv("MODEL_TOOL_USE", "deepseek/deepseek-chat")
 
 JEV_ENDPOINT_URL = os.getenv("JEV_ENDPOINT_URL", "https://api.typesafe.ai/v1/decision")
 
@@ -263,6 +270,8 @@ async def _classify_with_jev(
             {"tier": "INTERMEDIATE_CODE", "model": MODEL_INTERMEDIATE},
             {"tier": "HIGH_COMPLEXITY", "model": MODEL_COMPLEX},
             {"tier": "LONG_CONTEXT", "model": MODEL_LONG_CONTEXT},
+            {"tier": "TOOL_USE", "model": MODEL_TOOL_USE},
+            {"tier": "MULTIMODAL_VISION", "model": MODEL_VISION},
         ],
     }
 
