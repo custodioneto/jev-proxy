@@ -469,6 +469,7 @@ async def chat_completions(request: Request):
         decision = await _classify_with_jev(client, user_query, has_image=has_image, has_tools=has_tools)
 
     target_model = decision["target_model"]
+    print(f"[jev-proxy] {decision['tier']} -> {target_model} (img={has_image}, tools={has_tools})")
 
     api_key = _get_openrouter_api_key()
     if not api_key:
