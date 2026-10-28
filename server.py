@@ -7,6 +7,7 @@ do Open WebUI, centralizando-a como um endpoint OpenAI-compatível.
 
 import os
 import json
+import unicodedata
 from typing import AsyncGenerator, Any
 
 import httpx
@@ -28,6 +29,18 @@ OPENROUTER_MODELS_URL = f"{OPENROUTER_BASE}/models"
 import time
 _models_cache: dict[str, Any] = {"data": [], "ts": 0}
 MODELS_CACHE_TTL = int(os.getenv("OPENROUTER_MODELS_CACHE_TTL", "60"))
+
+
+def _safe_header(value: Any) -> str:
+    """Sanitiza valores de header HTTP para latin-1.
+
+    Clientes como o Open WebUI (Starlette) reencodam os headers do upstream
+    em latin-1 e quebram com Unicode decomposto (ex.: 'c' + U+0327 cedilha)
+    ou qualquer caractere fora do range 0-255. Normalizamos para NFC e
+    substituímos o que ainda assim não couber em latin-1.
+    """
+    normalized = unicodedata.normalize("NFC", str(value))
+    return normalized.encode("latin-1", errors="replace").decode("latin-1")
 
 # Modelos padrão (podem ser sobrescritos por variáveis de ambiente)
 # Hierarquia do árbitro (por precedência):
@@ -468,10 +481,10 @@ async def chat_completions(request: Request):
     upstream_payload.setdefault("temperature", 0.2)
 
     decision_headers = {
-        "X-Jev-Tier": str(decision["tier"]),
-        "X-Jev-Model": target_model,
-        "X-Jev-Confidence": str(decision["confidence"]),
-        "X-Jev-Reason": str(decision["reason"]),
+        "X-Jev-Tier": _safe_header(decision["tier"]),
+        "X-Jev-Model": _safe_header(target_model),
+        "X-Jev-Confidence": _safe_header(decision["confidence"]),
+        "X-Jev-Reason": _safe_header(decision["reason"]),
     }
 
     return await _forward_chat_to_openrouter(upstream_payload, decision_headers)
