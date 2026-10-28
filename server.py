@@ -39,7 +39,7 @@ MODELS_CACHE_TTL = int(os.getenv("OPENROUTER_MODELS_CACHE_TTL", "60"))
 #   6. Trivial      -> MODEL_SIMPLE
 MODEL_SIMPLE = os.getenv("MODEL_SIMPLE", "qwen/qwen-2.5-7b-instruct")
 MODEL_INTERMEDIATE = os.getenv("MODEL_INTERMEDIATE", "qwen/qwen-2.5-coder-32b-instruct")
-MODEL_COMPLEX = os.getenv("MODEL_COMPLEX", "deepseek/deepseek-r1")
+MODEL_COMPLEX = os.getenv("MODEL_COMPLEX", "moonshotai/kimi-k3")
 MODEL_LONG_CONTEXT = os.getenv("MODEL_LONG_CONTEXT", "moonshotai/kimi-k2.7-code")
 MODEL_VISION = os.getenv("MODEL_VISION", "qwen/qwen-2.5-vl-72b-instruct")
 MODEL_TOOL_USE = os.getenv("MODEL_TOOL_USE", "deepseek/deepseek-chat")
