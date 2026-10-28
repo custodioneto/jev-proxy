@@ -4,24 +4,45 @@ Micro-servidor proxy/roteador inteligente de LLMs, compatível com a API OpenAI.
 
 ## O que faz
 
-Ao invés de apontar cada interface diretamente para um único modelo no OpenRouter, o `jev-proxy` expõe um único modelo — `typesafe-jev-decision` — que analisa o prompt do usuário e escolhe automaticamente o modelo mais adequado, considerando:
+Ao invés de apontar cada interface diretamente para um único modelo no OpenRouter, o `jev-proxy` expõe um único modelo — `jev-arbitro` — que analisa o prompt do usuário e escolhe automaticamente o modelo mais adequado, considerando:
 
-- complexidade do raciocínio;
-- presença de código (especialmente C# / .NET);
+- presença de imagens (multimodal);
+- presença de tools/functions (function calling);
 - tamanho do contexto / arquitetura de projeto;
-- presença de imagens (multimodal).
+- complexidade do raciocínio;
+- presença de código;
+- economia de tokens (tier trivial).
+
+**Preferência de roteamento:** LLMs chineses com bom custo-benefício (Qwen, DeepSeek, Kimi/Moonshot).
 
 ## Roteamento
 
-| Tier | Gatilho | Modelo padrão |
-|---|---|---|
-| `SIMPLE` | Saudações, perguntas curtas, tarefas rotineiras | `openai/gpt-4o-mini` |
-| `INTERMEDIATE_CODE` | Código, sintaxe, tarefas de desenvolvimento comum | `qwen/qwen-2.5-coder-32b-instruct` |
-| `HIGH_COMPLEXITY` | Deadlock, concorrência, algoritmos, raciocínio profundo | `moonshotai/kimi-k3` |
-| `LONG_CONTEXT` | Contextos longos, arquitetura, múltiplos arquivos | `moonshotai/kimi-k2.7-code` |
-| `MULTIMODAL_VISION` | Mensagens contendo imagens | `openai/gpt-4o-mini` |
+Hierarquia do árbitro, por ordem de precedência:
+
+| # | Tier | Gatilho | Modelo padrão |
+|---|---|---|---|
+| 1 | `TOOL_USE_VISION` | Imagem **+** tools na mesma requisição | `moonshotai/kimi-k3` |
+| 2 | `TOOL_USE` | `tools`, `functions` ou `tool_choice` no payload | `deepseek/deepseek-chat` |
+| 3 | `MULTIMODAL_VISION` | Mensagens contendo imagens (sem tools) | `qwen/qwen-2.5-vl-72b-instruct` |
+| 4 | `LONG_CONTEXT` | Prompt > 2500 chars ou palavras-chave de contexto extenso | `moonshotai/kimi-k2.7-code` |
+| 5 | `HIGH_COMPLEXITY` | Deadlock, concorrência, race condition, benchmark | `moonshotai/kimi-k3` |
+| 6 | `INTERMEDIATE_CODE` | Código, sintaxe, tarefas de desenvolvimento (fallback) | `qwen/qwen-2.5-coder-32b-instruct` |
+| 7 | `SIMPLE` | Saudações e perguntas triviais (< 80 chars) | `qwen/qwen-2.5-7b-instruct` |
 
 A classificação primeiro tenta consultar o motor **TypeSafe Jev** (`https://api.typesafe.ai/v1/decision`); se o endpoint falhar ou não estiver configurado, cai automaticamente para um classificador heurístico local determinístico.
+
+### Roteamento validado em testes (2026-10-28)
+
+Todos os tiers foram validados end-to-end via headers `X-Jev-Tier` / `X-Jev-Model`:
+
+| Teste | Tier esperado | Modelo roteado | Resultado |
+|---|---|---|---|
+| Imagem + tools (DSH) | `TOOL_USE_VISION` | `moonshotai/kimi-k3` | ✅ |
+| Contexto longo (2695 chars) | `LONG_CONTEXT` | `moonshotai/kimi-k2.7-code` | ✅ |
+| Tools puro (function calling) | `TOOL_USE` | `deepseek/deepseek-chat` | ✅ |
+| Deadlock/race condition | `HIGH_COMPLEXITY` | `moonshotai/kimi-k3` | ✅ |
+| Script Python (CSV→JSON) | `INTERMEDIATE_CODE` | `qwen/qwen-2.5-coder-32b-instruct` | ✅ |
+| "Olá, bom dia!" | `SIMPLE` | `qwen/qwen-2.5-7b-instruct` | ✅ |
 
 ## Tecnologias
 
@@ -224,6 +245,15 @@ Configure o provedor OpenAI-compatível apontando para o proxy:
 Ou aplique a configuração via patch do DSH (`~/.dsh/profiles/web/cordis.patch.yml`):
 
 ```yaml
+- id: client-features
+  name: "@deepseek-ai/dsh-client-features"
+  config:
+    allowFileUploads: true
+    supportedFileTypes:
+      - image/png
+      - image/jpeg
+      - image/webp
+      - image/gif
 - id: llm-pi-ai
   name: "@deepseek-ai/dsh-llm-pi-ai"
   config:
@@ -238,17 +268,28 @@ Ou aplique a configuração via patch do DSH (`~/.dsh/profiles/web/cordis.patch.
         api: openai-completions
         baseURL: http://127.0.0.1:8001/v1
         apiKeyEnv: JEV_PROXY_API_KEY
-        modelOverrides:
-          jev-arbitro:
-            displayName: jev-arbitro
-            contextWindow: 128000
-            maxTokens: 32768
+        defaultInput:
+          - text
+          - image
+        models:
+          - id: jev-arbitro
+            name: jev-arbitro
+            contextWindow: 256000
+            maxTokens: 8192
+            input:
+              - text
+              - image
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
     provider: jev-proxy
     model: jev-arbitro
 ```
+
+> **Notas:**
+> - `input: [text, image]` é o que habilita o envio de imagens no DSH (não existe chave `vision`).
+> - `maxTokens: 8192` evita erros de provedores que somam prompt + resposta no limite.
+> - A compactação de histórico do DSH (`dsh-compaction-basic`) já vem ativa por padrão e herda o `jev-arbitro` como sumarizador — prompts de resumo caem no tier `LONG_CONTEXT` (`kimi-k2.7-code`).
 
 E adicione a credencial em `~/.dsh/.credentials.yaml`:
 
