@@ -35,6 +35,7 @@ MODEL_INTERMEDIATE = os.getenv("MODEL_INTERMEDIATE", "qwen/qwen-2.5-coder-32b-in
 MODEL_COMPLEX = os.getenv("MODEL_COMPLEX", "deepseek/deepseek-r1")
 MODEL_LONG_CONTEXT = os.getenv("MODEL_LONG_CONTEXT", "moonshotai/kimi-k3")
 MODEL_VISION = os.getenv("MODEL_VISION", "openai/gpt-4o-mini")
+MODEL_TOOL_USE = os.getenv("MODEL_TOOL_USE", "moonshotai/kimi-k2.7-code")
 
 JEV_ENDPOINT_URL = os.getenv("JEV_ENDPOINT_URL", "https://api.typesafe.ai/v1/decision")
 
@@ -193,13 +194,14 @@ def _estimate_local_complexity(
     length = len(prompt)
 
     # Regra de segurança: mensagens com tools nunca usam o modelo SIMPLE,
-    # mesmo que sejam saudações curtas.
+    # mesmo que sejam saudações curtas. Preferência por modelos chineses de
+    # boa qualidade e custo-benefício que suportem tool use.
     if has_tools:
         return {
-            "tier": "INTERMEDIATE_CODE",
-            "target_model": MODEL_INTERMEDIATE,
+            "tier": "TOOL_USE",
+            "target_model": MODEL_TOOL_USE,
             "confidence": 0.95,
-            "reason": "Requisição contém tools/functions. Roteado para modelo com suporte garantido a tool use.",
+            "reason": "Requisição contém tools/functions. Roteado para modelo preferencial de tool use.",
         }
 
     # Regra 1: Saudações ou perguntas muito curtas
