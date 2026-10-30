@@ -27,13 +27,17 @@ Hierarquia do árbitro, por ordem de precedência:
 | 4 | `LONG_CONTEXT` | Prompt > 2500 chars ou palavras-chave de contexto extenso | `moonshotai/kimi-k2.7-code` |
 | 5 | `HIGH_COMPLEXITY` | Deadlock, concorrência, race condition, benchmark | `moonshotai/kimi-k3` |
 | 6 | `INTERMEDIATE_CODE` | Código, sintaxe, tarefas de desenvolvimento (fallback) | `qwen/qwen-2.5-coder-32b-instruct` |
-| 7 | `SIMPLE` | Saudações e perguntas triviais (< 80 chars) | `qwen/qwen-2.5-7b-instruct` |
+| 7 | `SIMPLE` | Saudações triviais (< 80 chars) **ou** chamadas auxiliares do cliente (`### Task:` — título/follow-up do Open WebUI) | `qwen/qwen-2.5-7b-instruct` |
 
 A classificação primeiro tenta consultar o motor **TypeSafe Jev** (`https://api.typesafe.ai/v1/decision`); se o endpoint falhar ou não estiver configurado, cai automaticamente para um classificador heurístico local determinístico.
 
-### Roteamento validado em testes (2026-10-28)
+> **Notas:**
+> - Os headers `X-Jev-*` são sanitizados para **ASCII puro** (NFKD + remoção de acentos) — clientes como o Open WebUI decodificam headers do upstream como UTF-8 e quebrariam com bytes latin-1.
+> - Cada requisição gera uma linha de log enxuta: `[jev-proxy] TIER -> modelo (img=..., tools=...) q='trecho do prompt'`.
 
-Todos os tiers foram validados end-to-end via headers `X-Jev-Tier` / `X-Jev-Model`:
+### Roteamento validado em testes
+
+**Via curl/DSH (2026-10-28)** — headers `X-Jev-Tier` / `X-Jev-Model`:
 
 | Teste | Tier esperado | Modelo roteado | Resultado |
 |---|---|---|---|
@@ -43,6 +47,20 @@ Todos os tiers foram validados end-to-end via headers `X-Jev-Tier` / `X-Jev-Mode
 | Deadlock/race condition | `HIGH_COMPLEXITY` | `moonshotai/kimi-k3` | ✅ |
 | Script Python (CSV→JSON) | `INTERMEDIATE_CODE` | `qwen/qwen-2.5-coder-32b-instruct` | ✅ |
 | "Olá, bom dia!" | `SIMPLE` | `qwen/qwen-2.5-7b-instruct` | ✅ |
+
+**Via Open WebUI (2026-10-30)** — matriz completa dos 7 tiers validada end-to-end:
+
+| Teste | Tier esperado | Modelo roteado | Resultado |
+|---|---|---|---|
+| Título/follow-up do chat (`### Task:`) | `SIMPLE` | `qwen/qwen-2.5-7b-instruct` | ✅ |
+| Script Python (CSV→JSON) | `INTERMEDIATE_CODE` | `qwen/qwen-2.5-coder-32b-instruct` | ✅ |
+| Deadlock em goroutines | `HIGH_COMPLEXITY` | `moonshotai/kimi-k3` | ✅ |
+| Relatório de arquitetura (3491 chars) | `LONG_CONTEXT` | `moonshotai/kimi-k2.7-code` | ✅ |
+| Imagem anexada (sem tools) | `MULTIMODAL_VISION` | `qwen/qwen-2.5-vl-72b-instruct` | ✅ |
+| Ferramentas integradas ativas | `TOOL_USE` | `deepseek/deepseek-chat` | ✅ |
+| Imagem + tools (DSH) | `TOOL_USE_VISION` | `moonshotai/kimi-k3` | ✅ |
+
+> ⚠️ **Open WebUI e ferramentas integradas:** o modelo `jev-arbitro` no Open WebUI vem com ~17 ferramentas embutidas ativas (memória, data/hora etc.). Com elas ativas, **toda** requisição vai com `tools=True` e cai em `TOOL_USE`/`TOOL_USE_VISION`. Para a matriz completa do árbitro, desative-as em **Workspace → Models → jev-arbitro → Ferramentas integradas**.
 
 ## Tecnologias
 
