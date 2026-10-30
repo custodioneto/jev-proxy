@@ -236,6 +236,17 @@ def _estimate_local_complexity(
             "reason": "Requisição contém tools/functions. Roteado para modelo preferencial de tool use.",
         }
 
+    # Regra 0: Chamadas auxiliares do cliente (Open WebUI gera título do chat,
+    # sugestões de follow-up e tags com prompts "### Task: ..."). São tarefas
+    # triviais de geração — sempre modelo econômico, mesmo com histórico longo.
+    if prompt_lower.lstrip().startswith("### task:"):
+        return {
+            "tier": "SIMPLE",
+            "target_model": MODEL_SIMPLE,
+            "confidence": 0.97,
+            "reason": "Chamada auxiliar do cliente (titulo/follow-up/tags). Roteado para o modelo economico.",
+        }
+
     # Regra 1: Saudações ou perguntas muito curtas
     if length < 80 and any(w in prompt_lower for w in SIMPLE_KEYWORDS):
         return {
@@ -469,7 +480,8 @@ async def chat_completions(request: Request):
         decision = await _classify_with_jev(client, user_query, has_image=has_image, has_tools=has_tools)
 
     target_model = decision["target_model"]
-    print(f"[jev-proxy] {decision['tier']} -> {target_model} (img={has_image}, tools={has_tools})")
+    snippet = _safe_header(user_query.replace("\n", " "))[:70]
+    print(f"[jev-proxy] {decision['tier']} -> {target_model} (img={has_image}, tools={has_tools}) q={snippet!r}")
 
     api_key = _get_openrouter_api_key()
     if not api_key:
